@@ -16,10 +16,13 @@
 package com.android.internal.telephony.imsphone;
 
 import android.app.PendingIntent;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.HandlerThread;
 import android.os.Message;
+import android.telecom.VideoProfile;
 import android.telephony.PhoneNumberUtils;
 import android.test.suitebuilder.annotation.SmallTest;
 
@@ -32,6 +35,8 @@ import com.android.ims.ImsReasonInfo;
 import com.android.ims.ImsServiceClass;
 import com.android.ims.internal.ImsCallSession;
 import com.android.internal.telephony.Call;
+import com.android.internal.telephony.CallStateException;
+import com.android.internal.telephony.CommandsInterface;
 import com.android.internal.telephony.Connection;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.TelephonyTest;
@@ -40,6 +45,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -70,6 +76,8 @@ public class ImsPhoneCallTrackerTest extends TelephonyTest {
     private int mServiceId;
     @Mock
     private ImsCallSession mImsCallSession;
+    @Mock
+    private SharedPreferences mSharedPreferences;
 
     private class ImsCTHandlerThread extends HandlerThread {
 
@@ -369,6 +377,31 @@ public class ImsPhoneCallTrackerTest extends TelephonyTest {
         waitForMs(100);
         assertEquals(Call.State.DIALING, mCTUT.mForegroundCall.getState());
         assertEquals(Call.State.HOLDING, mCTUT.mBackgroundCall.getState());
+    }
+
+    /**
+     * Ensures that the dial method will perform a shared preferences lookup using the correct
+     * shared preference key to determine the CLIR mode.
+     */
+    @Test
+    @SmallTest
+    public void testDialClirMode() {
+        mCTUT.setSharedPreferenceProxy((Context context) -> {
+            return mSharedPreferences;
+        });
+        ArgumentCaptor<String> mStringCaptor = ArgumentCaptor.forClass(String.class);
+        doReturn(CommandsInterface.CLIR_INVOCATION).when(mSharedPreferences).getInt(
+                mStringCaptor.capture(), anyInt());
+
+        try {
+            mCTUT.dial("+17005554141", VideoProfile.STATE_AUDIO_ONLY, null);
+        } catch (CallStateException cse) {
+            cse.printStackTrace();
+            Assert.fail("unexpected exception thrown" + cse.getMessage());
+        }
+
+        // Ensure that the correct key was queried from the shared prefs.
+        assertEquals("clir_key0", mStringCaptor.getValue());
     }
 
     @Test
